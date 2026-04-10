@@ -52,9 +52,14 @@
         }
 
         .btn:hover { background: #2a2a4a; border-color: #5a5a8c; }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn:disabled:hover { background: #1a1a3a; border-color: #3a3a5c; }
         .btn.active { background: #2a1a3a; border-color: #8a4a9c; color: #d0a0e0; }
         .btn.story { background: #1a2a3a; border-color: #4a7a9c; color: #a0d0e0; }
         .btn.story:hover { background: #1a3a4a; }
+        .btn.warmup { background: #1a3a1a; border-color: #4a9c4a; color: #a0e0a0; }
+        .btn.warmup:hover { background: #1a4a1a; }
+        .btn.warmup.ready { background: #1a3a1a; border-color: #4a9c4a; color: #a0e0a0; opacity: 0.6; }
 
         .main {
             flex: 1;
@@ -96,6 +101,7 @@
             font-size: 18px;
             text-align: center;
             line-height: 1.6;
+            padding: 24px;
         }
 
         .footer {
@@ -111,6 +117,7 @@
         }
 
         .status.active { color: #8a4a9c; }
+        .status.warming { color: #9c8a4a; }
 
         .transcript-bar {
             padding: 12px 24px;
@@ -142,6 +149,41 @@
             50% { opacity: 0.4; }
         }
 
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border: 2px solid #4a9c4a;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        .progress-bar {
+            width: 200px;
+            height: 4px;
+            background: #1e1e3a;
+            border-radius: 2px;
+            overflow: hidden;
+            display: inline-block;
+            vertical-align: middle;
+            margin-left: 8px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #4a9c4a;
+            border-radius: 2px;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+
         .story-panel {
             display: none;
             position: absolute;
@@ -156,12 +198,6 @@
         }
 
         .story-panel.visible { display: block; }
-
-        .story-panel h2 {
-            font-size: 24px;
-            color: #b8b8d0;
-            margin-bottom: 24px;
-        }
 
         .story-text {
             font-size: 22px;
@@ -185,8 +221,11 @@
     <div class="header">
         <h1>NarrateVision</h1>
         <div class="controls">
+            <button class="btn warmup" id="warmupBtn" onclick="warmUp()">
+                Load Models
+            </button>
             <button class="btn story" onclick="toggleStory()">Read a Story</button>
-            <button class="btn" id="micBtn" onclick="toggleMic()">
+            <button class="btn" id="micBtn" onclick="toggleMic()" disabled>
                 <span class="mic-indicator" id="micDot"></span>
                 Start Listening
             </button>
@@ -197,8 +236,8 @@
         <div class="canvas-wrap">
             <img id="illustration" alt="Generated illustration" />
             <div class="placeholder" id="placeholder">
-                Press "Start Listening" and read aloud.<br>
-                Illustrations will appear here.
+                Click "Load Models" first to warm up.<br>
+                Then start listening and read aloud.
             </div>
         </div>
 
@@ -211,7 +250,7 @@
     <div class="transcript-bar" id="transcript"></div>
 
     <div class="footer">
-        <div class="status" id="status">Ready. Start ComfyUI first, then click "Start Listening".</div>
+        <div class="status" id="status">Click "Load Models" to get ready.</div>
     </div>
 
     <script>
@@ -232,6 +271,88 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
         let ws = null;
         let listening = false;
         let recognition = null;
+        let warmedUp = false;
+
+        // Check status on load
+        async function checkStatus() {
+            try {
+                const resp = await fetch('/status');
+                const data = await resp.json();
+
+                if (!data.comfyui) {
+                    setStatus('ComfyUI not detected. It may be starting up...');
+                    return;
+                }
+
+                if (data.warmed_up) {
+                    onWarmupComplete();
+                }
+            } catch (e) {
+                setStatus('Cannot reach server.');
+            }
+        }
+
+        async function warmUp() {
+            const btn = document.getElementById('warmupBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> Loading models...';
+
+            setStatus('Loading models into memory. This takes 15-30 seconds on first run...', 'warming');
+
+            try {
+                const resp = await fetch('/warmup', { method: 'POST' });
+                const data = await resp.json();
+
+                if (data.status === 'ready' || data.status === 'already_ready') {
+                    onWarmupComplete();
+                } else if (data.status === 'in_progress') {
+                    // Poll until ready
+                    pollWarmup();
+                } else {
+                    btn.disabled = false;
+                    btn.textContent = 'Retry Load';
+                    setStatus('Failed to load models. Is ComfyUI running?');
+                }
+            } catch (e) {
+                btn.disabled = false;
+                btn.textContent = 'Retry Load';
+                setStatus('Connection error. Is the server running?');
+            }
+        }
+
+        async function pollWarmup() {
+            const check = async () => {
+                const resp = await fetch('/status');
+                const data = await resp.json();
+                if (data.warmed_up) {
+                    onWarmupComplete();
+                } else {
+                    setTimeout(check, 2000);
+                }
+            };
+            setTimeout(check, 2000);
+        }
+
+        function onWarmupComplete() {
+            warmedUp = true;
+
+            const btn = document.getElementById('warmupBtn');
+            btn.classList.add('ready');
+            btn.disabled = true;
+            btn.textContent = 'Models Ready';
+
+            document.getElementById('micBtn').disabled = false;
+            document.getElementById('placeholder').innerHTML =
+                'Models loaded. Click "Start Listening" and read aloud.<br>Illustrations will appear here.';
+
+            setStatus('Ready. Click "Start Listening" to begin.');
+        }
+
+        function setStatus(text, className) {
+            const el = document.getElementById('status');
+            el.textContent = text;
+            el.className = className ? `status ${className}` : 'status';
+        }
 
         function toggleStory() {
             const panel = document.getElementById('storyPanel');
@@ -264,9 +385,7 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
                 }
 
                 if (data.type === 'status') {
-                    const el = document.getElementById('status');
-                    el.textContent = data.text;
-                    el.className = data.text.includes('Illustrating') ? 'status active' : 'status';
+                    setStatus(data.text, data.text.includes('Illustrating') ? 'active' : '');
                 }
             };
 
@@ -284,18 +403,21 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
         }
 
         function startListening() {
+            if (!warmedUp) {
+                setStatus('Load models first before listening.');
+                return;
+            }
+
             if (!ws || ws.readyState !== WebSocket.OPEN) {
-                document.getElementById('status').textContent = 'Connecting...';
+                setStatus('Connecting...');
                 connectWebSocket();
                 setTimeout(startListening, 1000);
                 return;
             }
 
-            // Use Web Speech API for browser-native speech recognition
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SpeechRecognition) {
-                document.getElementById('status').textContent =
-                    'Speech recognition not supported. Use Chrome or Edge.';
+                setStatus('Speech recognition not supported. Use Chrome or Edge.');
                 return;
             }
 
@@ -316,7 +438,6 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
             };
 
             recognition.onend = () => {
-                // Restart if still supposed to be listening
                 if (listening) {
                     recognition.start();
                 }
@@ -325,8 +446,7 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
             recognition.onerror = (event) => {
                 console.error('Speech error:', event.error);
                 if (event.error === 'not-allowed') {
-                    document.getElementById('status').textContent =
-                        'Microphone access denied. Allow it in browser settings.';
+                    setStatus('Microphone access denied. Allow it in browser settings.');
                     stopListening();
                 }
             };
@@ -337,7 +457,7 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
             document.getElementById('micBtn').classList.add('active');
             document.getElementById('micBtn').innerHTML =
                 '<span class="mic-indicator listening" id="micDot"></span> Listening...';
-            document.getElementById('status').textContent = 'Listening... Start reading aloud.';
+            setStatus('Listening... Start reading aloud.');
             document.getElementById('transcript').textContent = '';
         }
 
@@ -351,11 +471,12 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
             document.getElementById('micBtn').classList.remove('active');
             document.getElementById('micBtn').innerHTML =
                 '<span class="mic-indicator" id="micDot"></span> Start Listening';
-            document.getElementById('status').textContent = 'Stopped.';
+            setStatus('Stopped.');
         }
 
-        // Connect on load
+        // Init
         connectWebSocket();
+        checkStatus();
     </script>
 </body>
 </html>

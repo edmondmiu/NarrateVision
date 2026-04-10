@@ -6,27 +6,26 @@ Serves the UI and handles audio transcription + image generation via WebSocket.
 
 import asyncio
 import base64
-import io
 import json
+import subprocess
+import sys
 import time
-import tempfile
 
-import numpy as np
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from scene_extractor import extract_scene_from_accumulator
-from comfyui_client import generate_with_progress, is_comfyui_running
+from comfyui_client import generate_with_progress, is_comfyui_running, queue_prompt, get_image
 
 app = FastAPI()
-
-# Serve static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# State per connection
 MIN_WORDS_FOR_SCENE = 8
 SCENE_COOLDOWN = 5.0
+
+# Track warm-up state
+warmup_state = {"ready": False, "status": "idle"}
 
 
 @app.get("/")
@@ -37,7 +36,45 @@ async def index():
 
 @app.get("/status")
 async def status():
-    return {"comfyui": is_comfyui_running()}
+    return {
+        "comfyui": is_comfyui_running(),
+        "warmed_up": warmup_state["ready"],
+        "warmup_status": warmup_state["status"],
+    }
+
+
+@app.post("/warmup")
+async def warmup():
+    """Load models into GPU memory by running a throwaway generation."""
+    if warmup_state["ready"]:
+        return {"status": "already_ready"}
+
+    if warmup_state["status"] == "warming":
+        return {"status": "in_progress"}
+
+    warmup_state["status"] = "warming"
+
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, _do_warmup)
+
+    return {"status": "ready" if warmup_state["ready"] else "failed"}
+
+
+def _do_warmup():
+    """Run a single throwaway generation to load checkpoint + LoRA into memory."""
+    try:
+        print("[warmup] Loading models into memory...")
+        image_bytes = generate_with_progress("a simple red circle on white background")
+        if image_bytes:
+            warmup_state["ready"] = True
+            warmup_state["status"] = "ready"
+            print("[warmup] Models loaded. Ready to go.")
+        else:
+            warmup_state["status"] = "failed"
+            print("[warmup] Generation returned no image.")
+    except Exception as e:
+        warmup_state["status"] = "failed"
+        print(f"[warmup] Error: {e}")
 
 
 @app.websocket("/ws")
@@ -81,7 +118,6 @@ async def websocket_endpoint(ws: WebSocket):
 
                 await ws.send_json({"type": "status", "text": f"Illustrating: {prompt[:60]}..."})
 
-                # Run generation in thread to avoid blocking
                 loop = asyncio.get_event_loop()
                 image_bytes = await loop.run_in_executor(
                     None, _generate_image, prompt
@@ -107,16 +143,50 @@ def _generate_image(prompt: str) -> bytes | None:
         return None
 
 
+def _start_comfyui():
+    """Attempt to start ComfyUI in the background."""
+    import os
+
+    comfyui_path = os.environ.get(
+        "COMFYUI_PATH", "/Volumes/X9Pro/Developer/ComfyUI"
+    )
+    main_py = os.path.join(comfyui_path, "main.py")
+
+    if not os.path.exists(main_py):
+        print(f"[comfyui] Not found at {comfyui_path}")
+        return False
+
+    print(f"[comfyui] Starting from {comfyui_path}...")
+    subprocess.Popen(
+        [sys.executable, main_py, "--listen", "127.0.0.1", "--port", "8188"],
+        cwd=comfyui_path,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    # Wait for it to come up
+    for _ in range(30):
+        time.sleep(2)
+        if is_comfyui_running():
+            print("[comfyui] Running.")
+            return True
+
+    print("[comfyui] Failed to start within 60 seconds.")
+    return False
+
+
 if __name__ == "__main__":
     import uvicorn
 
     if not is_comfyui_running():
-        print(
-            "\n[error] ComfyUI is not running."
-            "\n        Start it first: cd /Volumes/X9Pro/Developer/ComfyUI && python3 main.py"
-            "\n        Then run this script again.\n"
-        )
-        exit(1)
+        print("[comfyui] Not running. Attempting to start it...")
+        if not _start_comfyui():
+            print(
+                "\n[error] Could not start ComfyUI automatically."
+                "\n        Start it manually: cd /Volumes/X9Pro/Developer/ComfyUI && python3 main.py"
+                "\n        Then run this script again.\n"
+            )
+            exit(1)
 
     print("\nNarrateVision")
     print("=============")
