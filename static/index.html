@@ -61,14 +61,12 @@
         .btn.warmup:hover { background: #1a4a1a; }
         .btn.warmup.ready { opacity: 0.6; }
 
-        /* Main content: side-by-side when story is open */
         .main {
             flex: 1;
             display: flex;
             overflow: hidden;
         }
 
-        /* Story panel: left side */
         .story-panel {
             display: none;
             width: 50%;
@@ -89,19 +87,17 @@
 
         .story-text p { margin-bottom: 20px; }
 
-        /* Illustration area: right side (or full width when no story) */
         .illustration-area {
             flex: 1;
             display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 24px;
+            flex-direction: column;
+            padding: 16px;
+            gap: 12px;
+            overflow: hidden;
         }
 
         .canvas-wrap {
-            width: 100%;
-            max-width: 640px;
-            aspect-ratio: 1;
+            flex: 1;
             background: #10102a;
             border-radius: 12px;
             overflow: hidden;
@@ -146,6 +142,41 @@
         }
 
         .gen-indicator.active { display: flex; align-items: center; gap: 8px; }
+
+        /* History strip */
+        .history-strip {
+            display: flex;
+            gap: 8px;
+            height: 72px;
+            min-height: 72px;
+            overflow-x: auto;
+            padding: 4px 0;
+            scrollbar-width: thin;
+            scrollbar-color: #2a2a4a #10102a;
+        }
+
+        .history-strip:empty { display: none; }
+
+        .history-thumb {
+            width: 64px;
+            height: 64px;
+            min-width: 64px;
+            border-radius: 6px;
+            overflow: hidden;
+            cursor: pointer;
+            border: 2px solid transparent;
+            opacity: 0.6;
+            transition: all 0.2s;
+        }
+
+        .history-thumb:hover { opacity: 1; border-color: #5a5a8c; }
+        .history-thumb.current { opacity: 1; border-color: #8a4a9c; }
+
+        .history-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
 
         .footer {
             padding: 12px 24px;
@@ -228,6 +259,8 @@
                     Drawing...
                 </div>
             </div>
+
+            <div class="history-strip" id="historyStrip"></div>
         </div>
     </div>
 
@@ -241,8 +274,8 @@
     const COMFY_WS = 'ws://127.0.0.1:8188/ws';
     const CLIENT_ID = crypto.randomUUID();
 
-    const SCENE_COOLDOWN = 3000;
-    const MIN_WORDS = 8;
+    const SCENE_COOLDOWN = 2000;
+    const MIN_WORDS = 6;
     const STYLE = 'storybook illustration, watercolor style, detailed, warm lighting';
     const NEG = 'blurry, ugly, deformed, text, watermark, low quality';
 
@@ -276,6 +309,8 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
     let sentences = [];
     let comfyWs = null;
     let storyVisible = false;
+    let history = [];  // { url, prompt }
+    let currentHistoryIdx = -1;
 
     function makeWorkflow(prompt) {
         return {
@@ -342,7 +377,6 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
         if (!history[promptId]) return null;
 
         const outputs = history[promptId].outputs || {};
-        // Check for errors
         const status = history[promptId].status || {};
         if (status.status_str === 'error') {
             const msgs = status.messages || [];
@@ -415,6 +449,40 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
         return `${STYLE}, ${parts.join(', ')}`;
     }
 
+    // -- History --
+    function addToHistory(url, prompt) {
+        history.push({ url, prompt });
+        currentHistoryIdx = history.length - 1;
+        renderHistory();
+    }
+
+    function showHistoryImage(idx) {
+        if (idx < 0 || idx >= history.length) return;
+        currentHistoryIdx = idx;
+        const img = document.getElementById('illustration');
+        img.src = history[idx].url;
+        img.classList.add('visible');
+        document.getElementById('placeholder').style.display = 'none';
+        renderHistory();
+    }
+
+    function renderHistory() {
+        const strip = document.getElementById('historyStrip');
+        strip.innerHTML = '';
+        history.forEach((item, idx) => {
+            const thumb = document.createElement('div');
+            thumb.className = 'history-thumb' + (idx === currentHistoryIdx ? ' current' : '');
+            thumb.onclick = () => showHistoryImage(idx);
+            const img = document.createElement('img');
+            img.src = item.url;
+            img.alt = `Scene ${idx + 1}`;
+            thumb.appendChild(img);
+            strip.appendChild(thumb);
+        });
+        strip.scrollLeft = strip.scrollWidth;
+    }
+
+    // -- Warm-up --
     async function warmUp() {
         const btn = document.getElementById('warmupBtn');
         btn.disabled = true;
@@ -460,6 +528,7 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
         }
     }
 
+    // -- Speech + generation --
     async function onTranscript(text) {
         if (!text || text.split(' ').length < 3) return;
 
@@ -482,7 +551,6 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
         const img = document.getElementById('illustration');
         const indicator = document.getElementById('genIndicator');
 
-        // Show generating state: blur current image, show spinner
         if (img.classList.contains('visible')) {
             img.classList.add('generating');
         }
@@ -497,6 +565,7 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
                 img.classList.add('visible');
                 document.getElementById('placeholder').style.display = 'none';
                 indicator.classList.remove('active');
+                addToHistory(url, prompt);
                 setStatus('Listening... Keep reading.');
             }
         } catch (e) {
