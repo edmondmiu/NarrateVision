@@ -1,6 +1,6 @@
-mlx-whisper>=0.4.0
-sounddevice>=0.4.6
+fastapi>=0.100.0
+uvicorn>=0.23.0
+python-multipart>=0.0.6
+websocket-client>=1.6.0
 numpy>=1.24.0
 Pillow>=10.0.0
-requests>=2.31.0
-PyQt6>=6.5.0

@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NarrateVision</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Georgia', serif;
+            background: #0a0a1a;
+            color: #e0e0e0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            padding: 16px 24px;
+            background: #12122a;
+            border-bottom: 1px solid #1e1e3a;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 400;
+            color: #b8b8d0;
+            letter-spacing: 0.05em;
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 8px 20px;
+            border: 1px solid #3a3a5c;
+            background: #1a1a3a;
+            color: #c0c0d8;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .btn:hover { background: #2a2a4a; border-color: #5a5a8c; }
+        .btn.active { background: #2a1a3a; border-color: #8a4a9c; color: #d0a0e0; }
+        .btn.story { background: #1a2a3a; border-color: #4a7a9c; color: #a0d0e0; }
+        .btn.story:hover { background: #1a3a4a; }
+
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            position: relative;
+        }
+
+        .canvas-wrap {
+            width: 100%;
+            max-width: 640px;
+            aspect-ratio: 1;
+            background: #10102a;
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        }
+
+        .canvas-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0;
+            transition: opacity 0.8s ease-in-out;
+        }
+
+        .canvas-wrap img.visible { opacity: 1; }
+
+        .placeholder {
+            position: absolute;
+            color: #3a3a5c;
+            font-size: 18px;
+            text-align: center;
+            line-height: 1.6;
+        }
+
+        .footer {
+            padding: 16px 24px;
+            background: #12122a;
+            border-top: 1px solid #1e1e3a;
+            text-align: center;
+        }
+
+        .status {
+            font-size: 14px;
+            color: #6a6a8c;
+        }
+
+        .status.active { color: #8a4a9c; }
+
+        .transcript-bar {
+            padding: 12px 24px;
+            background: #0e0e22;
+            border-top: 1px solid #1e1e3a;
+            max-height: 80px;
+            overflow-y: auto;
+            font-size: 13px;
+            color: #5a5a7c;
+            line-height: 1.5;
+        }
+
+        .mic-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #3a3a5c;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        .mic-indicator.listening {
+            background: #e04040;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .story-panel {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(10, 10, 26, 0.95);
+            z-index: 10;
+            padding: 40px;
+            overflow-y: auto;
+        }
+
+        .story-panel.visible { display: block; }
+
+        .story-panel h2 {
+            font-size: 24px;
+            color: #b8b8d0;
+            margin-bottom: 24px;
+        }
+
+        .story-text {
+            font-size: 22px;
+            line-height: 1.8;
+            color: #c8c8e0;
+            max-width: 640px;
+            margin: 0 auto;
+        }
+
+        .story-text p { margin-bottom: 16px; }
+
+        .close-story {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 11;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>NarrateVision</h1>
+        <div class="controls">
+            <button class="btn story" onclick="toggleStory()">Read a Story</button>
+            <button class="btn" id="micBtn" onclick="toggleMic()">
+                <span class="mic-indicator" id="micDot"></span>
+                Start Listening
+            </button>
+        </div>
+    </div>
+
+    <div class="main">
+        <div class="canvas-wrap">
+            <img id="illustration" alt="Generated illustration" />
+            <div class="placeholder" id="placeholder">
+                Press "Start Listening" and read aloud.<br>
+                Illustrations will appear here.
+            </div>
+        </div>
+
+        <div class="story-panel" id="storyPanel">
+            <button class="btn close-story" onclick="toggleStory()">Close</button>
+            <div class="story-text" id="storyContent"></div>
+        </div>
+    </div>
+
+    <div class="transcript-bar" id="transcript"></div>
+
+    <div class="footer">
+        <div class="status" id="status">Ready. Start ComfyUI first, then click "Start Listening".</div>
+    </div>
+
+    <script>
+        const STORY = `The old lighthouse keeper climbed the winding stone stairs as the storm gathered over the dark ocean. Rain hammered the windows and lightning split the sky above the rocky cliff.
+
+At the top of the tower, she lit the great lamp and its golden beam swept across the churning sea. Far below, waves crashed against the jagged rocks, sending white spray high into the air.
+
+Through her telescope she spotted a small fishing boat, tossed like a leaf on the mountainous waves. The boat's sail was torn and the fisherman was struggling against the wind and the rain.
+
+She rang the great brass bell three times. The deep sound echoed across the stormy bay, cutting through the howling wind. In the village below, lights flickered on in cottage windows.
+
+The fisherman heard the bell and turned his boat toward the light. Slowly, painfully, he navigated through the rocks. The lighthouse beam guided him like a bright golden path across the dark water.
+
+As the boat reached the harbour, the old woman smiled and poured herself a cup of tea in the warm kitchen at the base of the tower. The cat on the windowsill watched the storm pass, and stars began to appear through the breaking clouds.
+
+By morning the sea was calm and blue. Seagulls circled the lighthouse in the bright sunshine. The fisherman walked up the cliff path carrying a basket of fresh fish, a gift for the keeper who had saved his life in the dark and stormy night.`;
+
+        let ws = null;
+        let listening = false;
+        let recognition = null;
+
+        function toggleStory() {
+            const panel = document.getElementById('storyPanel');
+            if (panel.classList.contains('visible')) {
+                panel.classList.remove('visible');
+            } else {
+                document.getElementById('storyContent').innerHTML =
+                    STORY.split('\n\n').map(p => `<p>${p}</p>`).join('');
+                panel.classList.add('visible');
+            }
+        }
+
+        function connectWebSocket() {
+            ws = new WebSocket(`ws://${location.host}/ws`);
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+
+                if (data.type === 'image') {
+                    const img = document.getElementById('illustration');
+                    img.src = 'data:image/png;base64,' + data.data;
+                    img.classList.add('visible');
+                    document.getElementById('placeholder').style.display = 'none';
+                }
+
+                if (data.type === 'transcript') {
+                    const el = document.getElementById('transcript');
+                    el.textContent += data.text + ' ';
+                    el.scrollTop = el.scrollHeight;
+                }
+
+                if (data.type === 'status') {
+                    const el = document.getElementById('status');
+                    el.textContent = data.text;
+                    el.className = data.text.includes('Illustrating') ? 'status active' : 'status';
+                }
+            };
+
+            ws.onclose = () => {
+                setTimeout(connectWebSocket, 2000);
+            };
+        }
+
+        function toggleMic() {
+            if (listening) {
+                stopListening();
+            } else {
+                startListening();
+            }
+        }
+
+        function startListening() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                document.getElementById('status').textContent = 'Connecting...';
+                connectWebSocket();
+                setTimeout(startListening, 1000);
+                return;
+            }
+
+            // Use Web Speech API for browser-native speech recognition
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                document.getElementById('status').textContent =
+                    'Speech recognition not supported. Use Chrome or Edge.';
+                return;
+            }
+
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+
+            recognition.onresult = (event) => {
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    if (event.results[i].isFinal) {
+                        const text = event.results[i][0].transcript;
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({ type: 'transcript', text: text }));
+                        }
+                    }
+                }
+            };
+
+            recognition.onend = () => {
+                // Restart if still supposed to be listening
+                if (listening) {
+                    recognition.start();
+                }
+            };
+
+            recognition.onerror = (event) => {
+                console.error('Speech error:', event.error);
+                if (event.error === 'not-allowed') {
+                    document.getElementById('status').textContent =
+                        'Microphone access denied. Allow it in browser settings.';
+                    stopListening();
+                }
+            };
+
+            recognition.start();
+            listening = true;
+
+            document.getElementById('micBtn').classList.add('active');
+            document.getElementById('micBtn').innerHTML =
+                '<span class="mic-indicator listening" id="micDot"></span> Listening...';
+            document.getElementById('status').textContent = 'Listening... Start reading aloud.';
+            document.getElementById('transcript').textContent = '';
+        }
+
+        function stopListening() {
+            listening = false;
+            if (recognition) {
+                recognition.stop();
+                recognition = null;
+            }
+
+            document.getElementById('micBtn').classList.remove('active');
+            document.getElementById('micBtn').innerHTML =
+                '<span class="mic-indicator" id="micDot"></span> Start Listening';
+            document.getElementById('status').textContent = 'Stopped.';
+        }
+
+        // Connect on load
+        connectWebSocket();
+    </script>
+</body>
+</html>
