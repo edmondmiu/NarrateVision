@@ -117,10 +117,11 @@
             height: 100%;
             object-fit: cover;
             opacity: 0;
-            transition: opacity 0.8s ease-in-out;
+            transition: opacity 0.3s ease-in-out;
         }
 
         .canvas-wrap img.visible { opacity: 1; }
+        .canvas-wrap img.generating { opacity: 0.4; filter: blur(4px); }
 
         .placeholder {
             position: absolute;
@@ -130,6 +131,21 @@
             line-height: 1.6;
             padding: 24px;
         }
+
+        .gen-indicator {
+            display: none;
+            position: absolute;
+            bottom: 16px;
+            right: 16px;
+            background: rgba(0,0,0,0.6);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            color: #a0a0c0;
+            font-family: system-ui, sans-serif;
+        }
+
+        .gen-indicator.active { display: flex; align-items: center; gap: 8px; }
 
         .footer {
             padding: 12px 24px;
@@ -207,6 +223,10 @@
                     Click "Load Models" to warm up.<br>
                     Then start listening and read aloud.
                 </div>
+                <div class="gen-indicator" id="genIndicator">
+                    <span class="spinner" style="border-color: #a0a0c0; border-top-color: transparent;"></span>
+                    Drawing...
+                </div>
             </div>
         </div>
     </div>
@@ -221,7 +241,7 @@
     const COMFY_WS = 'ws://127.0.0.1:8188/ws';
     const CLIENT_ID = crypto.randomUUID();
 
-    const SCENE_COOLDOWN = 5000;
+    const SCENE_COOLDOWN = 3000;
     const MIN_WORDS = 8;
     const STYLE = 'storybook illustration, watercolor style, detailed, warm lighting';
     const NEG = 'blurry, ugly, deformed, text, watermark, low quality';
@@ -459,19 +479,30 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
         lastPrompt = prompt;
         lastGenTime = now;
 
-        setStatus(`Illustrating: ${prompt.slice(0, 60)}...`, 'active');
+        const img = document.getElementById('illustration');
+        const indicator = document.getElementById('genIndicator');
+
+        // Show generating state: blur current image, show spinner
+        if (img.classList.contains('visible')) {
+            img.classList.add('generating');
+        }
+        indicator.classList.add('active');
+        setStatus(`Illustrating...`, 'active');
 
         try {
             const url = await generateImage(prompt);
             if (url) {
-                const img = document.getElementById('illustration');
+                img.classList.remove('generating');
                 img.src = url;
                 img.classList.add('visible');
                 document.getElementById('placeholder').style.display = 'none';
+                indicator.classList.remove('active');
                 setStatus('Listening... Keep reading.');
             }
         } catch (e) {
             console.error('Generation error:', e);
+            img.classList.remove('generating');
+            indicator.classList.remove('active');
             setStatus('Generation error. Keep reading, will retry.');
         }
 
