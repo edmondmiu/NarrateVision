@@ -18,7 +18,7 @@
         }
 
         .header {
-            padding: 16px 24px;
+            padding: 12px 24px;
             background: #12122a;
             border-bottom: 1px solid #1e1e3a;
             display: flex;
@@ -61,14 +61,41 @@
         .btn.warmup:hover { background: #1a4a1a; }
         .btn.warmup.ready { opacity: 0.6; }
 
+        /* Main content: side-by-side when story is open */
         .main {
             flex: 1;
             display: flex;
-            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Story panel: left side */
+        .story-panel {
+            display: none;
+            width: 50%;
+            background: #0e0e22;
+            border-right: 1px solid #1e1e3a;
+            overflow-y: auto;
+            padding: 32px;
+        }
+
+        .story-panel.visible { display: block; }
+
+        .story-text {
+            font-size: 20px;
+            line-height: 1.8;
+            color: #c8c8e0;
+            max-width: 520px;
+        }
+
+        .story-text p { margin-bottom: 20px; }
+
+        /* Illustration area: right side (or full width when no story) */
+        .illustration-area {
+            flex: 1;
+            display: flex;
             align-items: center;
             justify-content: center;
             padding: 24px;
-            position: relative;
         }
 
         .canvas-wrap {
@@ -105,26 +132,26 @@
         }
 
         .footer {
-            padding: 16px 24px;
+            padding: 12px 24px;
             background: #12122a;
             border-top: 1px solid #1e1e3a;
-            text-align: center;
+            display: flex;
+            align-items: center;
+            gap: 16px;
         }
 
-        .status { font-size: 14px; color: #6a6a8c; }
+        .status { font-size: 14px; color: #6a6a8c; flex: 1; }
         .status.active { color: #8a4a9c; }
         .status.warming { color: #9c8a4a; }
         .status.error { color: #c05050; }
 
         .transcript-bar {
-            padding: 12px 24px;
-            background: #0e0e22;
-            border-top: 1px solid #1e1e3a;
-            max-height: 80px;
-            overflow-y: auto;
-            font-size: 13px;
-            color: #5a5a7c;
-            line-height: 1.5;
+            font-size: 12px;
+            color: #4a4a6c;
+            max-width: 50%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .mic-indicator {
@@ -141,7 +168,6 @@
         }
 
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-
         @keyframes spin { to { transform: rotate(360deg); } }
 
         .spinner {
@@ -154,34 +180,6 @@
             margin-right: 8px;
             vertical-align: middle;
         }
-
-        .story-panel {
-            display: none;
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(10, 10, 26, 0.95);
-            z-index: 10;
-            padding: 40px;
-            overflow-y: auto;
-        }
-
-        .story-panel.visible { display: block; }
-
-        .story-text {
-            font-size: 22px;
-            line-height: 1.8;
-            color: #c8c8e0;
-            max-width: 640px;
-            margin: 0 auto;
-        }
-
-        .story-text p { margin-bottom: 16px; }
-
-        .close-story {
-            position: fixed;
-            top: 20px; right: 20px;
-            z-index: 11;
-        }
     </style>
 </head>
 <body>
@@ -189,7 +187,7 @@
         <h1>NarrateVision</h1>
         <div class="controls">
             <button class="btn warmup" id="warmupBtn" onclick="warmUp()">Load Models</button>
-            <button class="btn story" onclick="toggleStory()">Read a Story</button>
+            <button class="btn story" id="storyBtn" onclick="toggleStory()">Show Story</button>
             <button class="btn" id="micBtn" onclick="toggleMic()" disabled>
                 <span class="mic-indicator" id="micDot"></span>
                 Start Listening
@@ -198,24 +196,24 @@
     </div>
 
     <div class="main">
-        <div class="canvas-wrap">
-            <img id="illustration" alt="" />
-            <div class="placeholder" id="placeholder">
-                Click "Load Models" to warm up.<br>
-                Then start listening and read aloud.
-            </div>
+        <div class="story-panel" id="storyPanel">
+            <div class="story-text" id="storyContent"></div>
         </div>
 
-        <div class="story-panel" id="storyPanel">
-            <button class="btn close-story" onclick="toggleStory()">Close</button>
-            <div class="story-text" id="storyContent"></div>
+        <div class="illustration-area">
+            <div class="canvas-wrap">
+                <img id="illustration" alt="" />
+                <div class="placeholder" id="placeholder">
+                    Click "Load Models" to warm up.<br>
+                    Then start listening and read aloud.
+                </div>
+            </div>
         </div>
     </div>
 
-    <div class="transcript-bar" id="transcript"></div>
-
     <div class="footer">
         <div class="status" id="status">Click "Load Models" to get ready.</div>
+        <div class="transcript-bar" id="transcript"></div>
     </div>
 
     <script>
@@ -249,7 +247,6 @@ As the boat reached the harbour, the old woman smiled and poured herself a cup o
 
 By morning the sea was calm and blue. Seagulls circled the lighthouse in the bright sunshine. The fisherman walked up the cliff path carrying a basket of fresh fish, a gift for the keeper who had saved his life in the dark and stormy night.`;
 
-    // -- State --
     let warmedUp = false;
     let listening = false;
     let recognition = null;
@@ -258,8 +255,8 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
     let lastPrompt = null;
     let sentences = [];
     let comfyWs = null;
+    let storyVisible = false;
 
-    // -- ComfyUI workflow --
     function makeWorkflow(prompt) {
         return {
             "3": {
@@ -309,15 +306,11 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
         };
     }
 
-    // -- ComfyUI API (direct from browser) --
     async function queuePrompt(promptText) {
         const resp = await fetch(`${COMFY}/prompt`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                prompt: makeWorkflow(promptText),
-                client_id: CLIENT_ID
-            })
+            body: JSON.stringify({ prompt: makeWorkflow(promptText), client_id: CLIENT_ID })
         });
         const data = await resp.json();
         return data.prompt_id;
@@ -329,12 +322,22 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
         if (!history[promptId]) return null;
 
         const outputs = history[promptId].outputs || {};
+        // Check for errors
+        const status = history[promptId].status || {};
+        if (status.status_str === 'error') {
+            const msgs = status.messages || [];
+            for (const msg of msgs) {
+                if (msg[0] === 'execution_error') {
+                    throw new Error(msg[1].exception_message || 'Generation failed');
+                }
+            }
+        }
+
         for (const nodeId in outputs) {
             const images = outputs[nodeId].images;
             if (images && images.length > 0) {
                 const img = images[0];
-                const url = `${COMFY}/view?filename=${encodeURIComponent(img.filename)}&subfolder=${encodeURIComponent(img.subfolder || '')}&type=${encodeURIComponent(img.type || 'output')}`;
-                return url;
+                return `${COMFY}/view?filename=${encodeURIComponent(img.filename)}&subfolder=${encodeURIComponent(img.subfolder || '')}&type=${encodeURIComponent(img.type || 'output')}`;
             }
         }
         return null;
@@ -371,7 +374,6 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
         return await getImage(promptId);
     }
 
-    // -- Scene extraction --
     function extractScene(texts) {
         const combined = texts.slice(-3).join(' ').toLowerCase();
         const found = {};
@@ -393,7 +395,6 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
         return `${STYLE}, ${parts.join(', ')}`;
     }
 
-    // -- Warm-up --
     async function warmUp() {
         const btn = document.getElementById('warmupBtn');
         btn.disabled = true;
@@ -401,7 +402,6 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
         setStatus('Loading models into memory (first run takes 15-30s)...', 'warming');
 
         try {
-            // Check ComfyUI is reachable
             await fetch(`${COMFY}/system_stats`);
         } catch (e) {
             btn.disabled = false;
@@ -412,18 +412,13 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
 
         try {
             connectComfyWs();
-            // Wait for ws to open
             await new Promise((resolve, reject) => {
                 const check = setInterval(() => {
-                    if (comfyWs.readyState === WebSocket.OPEN) {
-                        clearInterval(check);
-                        resolve();
-                    }
+                    if (comfyWs.readyState === WebSocket.OPEN) { clearInterval(check); resolve(); }
                 }, 200);
-                setTimeout(() => { clearInterval(check); reject(new Error('ws timeout')); }, 5000);
+                setTimeout(() => { clearInterval(check); reject(new Error('WebSocket timeout')); }, 5000);
             });
 
-            // Run throwaway generation to load models
             const url = await generateImage('a simple test, solid blue background');
             if (url) {
                 warmedUp = true;
@@ -445,14 +440,11 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
         }
     }
 
-    // -- Speech + generation loop --
     async function onTranscript(text) {
         if (!text || text.split(' ').length < 3) return;
 
         sentences.push(text);
-        const el = document.getElementById('transcript');
-        el.textContent += text + ' ';
-        el.scrollTop = el.scrollHeight;
+        document.getElementById('transcript').textContent = text;
 
         const now = Date.now();
         if (now - lastGenTime < SCENE_COOLDOWN || generating) return;
@@ -521,7 +513,6 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
         document.getElementById('micBtn').innerHTML =
             '<span class="mic-indicator listening"></span> Listening...';
         setStatus('Listening... Start reading aloud.');
-        document.getElementById('transcript').textContent = '';
     }
 
     function stopListening() {
@@ -534,13 +525,18 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
     }
 
     function toggleStory() {
-        const p = document.getElementById('storyPanel');
-        if (p.classList.contains('visible')) {
-            p.classList.remove('visible');
-        } else {
+        const panel = document.getElementById('storyPanel');
+        const btn = document.getElementById('storyBtn');
+        storyVisible = !storyVisible;
+
+        if (storyVisible) {
             document.getElementById('storyContent').innerHTML =
                 STORY.split('\n\n').map(s => `<p>${s}</p>`).join('');
-            p.classList.add('visible');
+            panel.classList.add('visible');
+            btn.textContent = 'Hide Story';
+        } else {
+            panel.classList.remove('visible');
+            btn.textContent = 'Show Story';
         }
     }
 

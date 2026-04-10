@@ -13,7 +13,7 @@ echo ""
 if ! curl -s http://127.0.0.1:8188/system_stats > /dev/null 2>&1; then
     echo "Starting ComfyUI..."
     cd "$COMFYUI_DIR"
-    python3 main.py --listen 127.0.0.1 --port 8188 --enable-cors-header "*" &
+    python3 main.py --listen 127.0.0.1 --port 8188 --enable-cors-header "*" > /tmp/comfyui.log 2>&1 &
     COMFY_PID=$!
 
     echo "Waiting for ComfyUI to start..."
