@@ -59,7 +59,7 @@
         .btn.story:hover { background: #1a3a4a; }
         .btn.warmup { background: #1a3a1a; border-color: #4a9c4a; color: #a0e0a0; }
         .btn.warmup:hover { background: #1a4a1a; }
-        .btn.warmup.ready { background: #1a3a1a; border-color: #4a9c4a; color: #a0e0a0; opacity: 0.6; }
+        .btn.warmup.ready { opacity: 0.6; }
 
         .main {
             flex: 1;
@@ -111,13 +111,10 @@
             text-align: center;
         }
 
-        .status {
-            font-size: 14px;
-            color: #6a6a8c;
-        }
-
+        .status { font-size: 14px; color: #6a6a8c; }
         .status.active { color: #8a4a9c; }
         .status.warming { color: #9c8a4a; }
+        .status.error { color: #c05050; }
 
         .transcript-bar {
             padding: 12px 24px;
@@ -131,8 +128,7 @@
         }
 
         .mic-indicator {
-            width: 10px;
-            height: 10px;
+            width: 10px; height: 10px;
             border-radius: 50%;
             background: #3a3a5c;
             display: inline-block;
@@ -144,19 +140,13 @@
             animation: pulse 1.5s infinite;
         }
 
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.4; }
-        }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
+        @keyframes spin { to { transform: rotate(360deg); } }
 
         .spinner {
             display: inline-block;
-            width: 10px;
-            height: 10px;
+            width: 10px; height: 10px;
             border: 2px solid #4a9c4a;
             border-top-color: transparent;
             border-radius: 50%;
@@ -165,32 +155,10 @@
             vertical-align: middle;
         }
 
-        .progress-bar {
-            width: 200px;
-            height: 4px;
-            background: #1e1e3a;
-            border-radius: 2px;
-            overflow: hidden;
-            display: inline-block;
-            vertical-align: middle;
-            margin-left: 8px;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: #4a9c4a;
-            border-radius: 2px;
-            transition: width 0.3s ease;
-            width: 0%;
-        }
-
         .story-panel {
             display: none;
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
+            top: 0; left: 0; right: 0; bottom: 0;
             background: rgba(10, 10, 26, 0.95);
             z-index: 10;
             padding: 40px;
@@ -211,8 +179,7 @@
 
         .close-story {
             position: fixed;
-            top: 20px;
-            right: 20px;
+            top: 20px; right: 20px;
             z-index: 11;
         }
     </style>
@@ -221,9 +188,7 @@
     <div class="header">
         <h1>NarrateVision</h1>
         <div class="controls">
-            <button class="btn warmup" id="warmupBtn" onclick="warmUp()">
-                Load Models
-            </button>
+            <button class="btn warmup" id="warmupBtn" onclick="warmUp()">Load Models</button>
             <button class="btn story" onclick="toggleStory()">Read a Story</button>
             <button class="btn" id="micBtn" onclick="toggleMic()" disabled>
                 <span class="mic-indicator" id="micDot"></span>
@@ -234,9 +199,9 @@
 
     <div class="main">
         <div class="canvas-wrap">
-            <img id="illustration" alt="Generated illustration" />
+            <img id="illustration" alt="" />
             <div class="placeholder" id="placeholder">
-                Click "Load Models" first to warm up.<br>
+                Click "Load Models" to warm up.<br>
                 Then start listening and read aloud.
             </div>
         </div>
@@ -254,7 +219,23 @@
     </div>
 
     <script>
-        const STORY = `The old lighthouse keeper climbed the winding stone stairs as the storm gathered over the dark ocean. Rain hammered the windows and lightning split the sky above the rocky cliff.
+    const COMFY = 'http://127.0.0.1:8188';
+    const COMFY_WS = 'ws://127.0.0.1:8188/ws';
+    const CLIENT_ID = crypto.randomUUID();
+
+    const SCENE_COOLDOWN = 5000;
+    const MIN_WORDS = 8;
+    const STYLE = 'storybook illustration, watercolor style, detailed, warm lighting';
+    const NEG = 'blurry, ugly, deformed, text, watermark, low quality';
+
+    const KEYWORDS = {
+        settings: ['forest','castle','mountain','ocean','sea','river','lake','village','city','cave','desert','garden','house','room','sky','field','road','bridge','tower','palace','church','school','market','beach','island','valley','hill','cliff','dungeon','temple','library','kitchen','bedroom','street','lighthouse','harbour','boat','ship','stairs','window'],
+        characters: ['king','queen','prince','princess','knight','dragon','witch','wizard','fairy','giant','monster','wolf','bear','fox','rabbit','cat','dog','bird','horse','lion','tiger','child','boy','girl','man','woman','old man','old woman','soldier','pirate','thief','angel','demon','ghost','fisherman','keeper','seagull'],
+        actions: ['running','flying','swimming','fighting','sleeping','walking','dancing','singing','crying','laughing','riding','climbing','falling','hiding','searching','eating','drinking','reading','writing','building','sailing','struggling','smiling','watching'],
+        atmosphere: ['dark','bright','stormy','sunny','rainy','snowy','foggy','moonlit','starry','golden','shadowy','misty','cold','warm','magical','mysterious','peaceful','scary','calm','churning']
+    };
+
+    const STORY = `The old lighthouse keeper climbed the winding stone stairs as the storm gathered over the dark ocean. Rain hammered the windows and lightning split the sky above the rocky cliff.
 
 At the top of the tower, she lit the great lamp and its golden beam swept across the churning sea. Far below, waves crashed against the jagged rocks, sending white spray high into the air.
 
@@ -268,215 +249,306 @@ As the boat reached the harbour, the old woman smiled and poured herself a cup o
 
 By morning the sea was calm and blue. Seagulls circled the lighthouse in the bright sunshine. The fisherman walked up the cliff path carrying a basket of fresh fish, a gift for the keeper who had saved his life in the dark and stormy night.`;
 
-        let ws = null;
-        let listening = false;
-        let recognition = null;
-        let warmedUp = false;
+    // -- State --
+    let warmedUp = false;
+    let listening = false;
+    let recognition = null;
+    let generating = false;
+    let lastGenTime = 0;
+    let lastPrompt = null;
+    let sentences = [];
+    let comfyWs = null;
 
-        // Check status on load
-        async function checkStatus() {
-            try {
-                const resp = await fetch('/status');
-                const data = await resp.json();
-
-                if (!data.comfyui) {
-                    setStatus('ComfyUI not detected. It may be starting up...');
-                    return;
+    // -- ComfyUI workflow --
+    function makeWorkflow(prompt) {
+        return {
+            "3": {
+                class_type: "KSampler",
+                inputs: {
+                    seed: Math.floor(Math.random() * 2**32),
+                    steps: 1, cfg: 1.0,
+                    sampler_name: "euler", scheduler: "normal",
+                    denoise: 1.0,
+                    model: ["10", 0],
+                    positive: ["6", 0], negative: ["7", 0],
+                    latent_image: ["5", 0]
                 }
-
-                if (data.warmed_up) {
-                    onWarmupComplete();
+            },
+            "4": {
+                class_type: "CheckpointLoaderSimple",
+                inputs: { ckpt_name: "v1-5-pruned-emaonly-fp16.safetensors" }
+            },
+            "5": {
+                class_type: "EmptyLatentImage",
+                inputs: { width: 512, height: 512, batch_size: 1 }
+            },
+            "6": {
+                class_type: "CLIPTextEncode",
+                inputs: { text: prompt, clip: ["10", 1] }
+            },
+            "7": {
+                class_type: "CLIPTextEncode",
+                inputs: { text: NEG, clip: ["10", 1] }
+            },
+            "8": {
+                class_type: "VAEDecode",
+                inputs: { samples: ["3", 0], vae: ["4", 2] }
+            },
+            "9": {
+                class_type: "SaveImage",
+                inputs: { filename_prefix: "narrate", images: ["8", 0] }
+            },
+            "10": {
+                class_type: "LoraLoader",
+                inputs: {
+                    lora_name: "Hyper-SD15-1step-lora.safetensors",
+                    strength_model: 1.0, strength_clip: 1.0,
+                    model: ["4", 0], clip: ["4", 1]
                 }
-            } catch (e) {
-                setStatus('Cannot reach server.');
+            }
+        };
+    }
+
+    // -- ComfyUI API (direct from browser) --
+    async function queuePrompt(promptText) {
+        const resp = await fetch(`${COMFY}/prompt`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                prompt: makeWorkflow(promptText),
+                client_id: CLIENT_ID
+            })
+        });
+        const data = await resp.json();
+        return data.prompt_id;
+    }
+
+    async function getImage(promptId) {
+        const resp = await fetch(`${COMFY}/history/${promptId}`);
+        const history = await resp.json();
+        if (!history[promptId]) return null;
+
+        const outputs = history[promptId].outputs || {};
+        for (const nodeId in outputs) {
+            const images = outputs[nodeId].images;
+            if (images && images.length > 0) {
+                const img = images[0];
+                const url = `${COMFY}/view?filename=${encodeURIComponent(img.filename)}&subfolder=${encodeURIComponent(img.subfolder || '')}&type=${encodeURIComponent(img.type || 'output')}`;
+                return url;
             }
         }
+        return null;
+    }
 
-        async function warmUp() {
-            const btn = document.getElementById('warmupBtn');
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner"></span> Loading models...';
+    function connectComfyWs() {
+        comfyWs = new WebSocket(`${COMFY_WS}?clientId=${CLIENT_ID}`);
+        comfyWs.onclose = () => setTimeout(connectComfyWs, 3000);
+        comfyWs.onerror = () => {};
+    }
 
-            setStatus('Loading models into memory. This takes 15-30 seconds on first run...', 'warming');
-
-            try {
-                const resp = await fetch('/warmup', { method: 'POST' });
-                const data = await resp.json();
-
-                if (data.status === 'ready' || data.status === 'already_ready') {
-                    onWarmupComplete();
-                } else if (data.status === 'in_progress') {
-                    // Poll until ready
-                    pollWarmup();
-                } else {
-                    btn.disabled = false;
-                    btn.textContent = 'Retry Load';
-                    setStatus('Failed to load models. Is ComfyUI running?');
-                }
-            } catch (e) {
-                btn.disabled = false;
-                btn.textContent = 'Retry Load';
-                setStatus('Connection error. Is the server running?');
-            }
-        }
-
-        async function pollWarmup() {
-            const check = async () => {
-                const resp = await fetch('/status');
-                const data = await resp.json();
-                if (data.warmed_up) {
-                    onWarmupComplete();
-                } else {
-                    setTimeout(check, 2000);
-                }
-            };
-            setTimeout(check, 2000);
-        }
-
-        function onWarmupComplete() {
-            warmedUp = true;
-
-            const btn = document.getElementById('warmupBtn');
-            btn.classList.add('ready');
-            btn.disabled = true;
-            btn.textContent = 'Models Ready';
-
-            document.getElementById('micBtn').disabled = false;
-            document.getElementById('placeholder').innerHTML =
-                'Models loaded. Click "Start Listening" and read aloud.<br>Illustrations will appear here.';
-
-            setStatus('Ready. Click "Start Listening" to begin.');
-        }
-
-        function setStatus(text, className) {
-            const el = document.getElementById('status');
-            el.textContent = text;
-            el.className = className ? `status ${className}` : 'status';
-        }
-
-        function toggleStory() {
-            const panel = document.getElementById('storyPanel');
-            if (panel.classList.contains('visible')) {
-                panel.classList.remove('visible');
-            } else {
-                document.getElementById('storyContent').innerHTML =
-                    STORY.split('\n\n').map(p => `<p>${p}</p>`).join('');
-                panel.classList.add('visible');
-            }
-        }
-
-        function connectWebSocket() {
-            ws = new WebSocket(`ws://${location.host}/ws`);
-
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-
-                if (data.type === 'image') {
-                    const img = document.getElementById('illustration');
-                    img.src = 'data:image/png;base64,' + data.data;
-                    img.classList.add('visible');
-                    document.getElementById('placeholder').style.display = 'none';
-                }
-
-                if (data.type === 'transcript') {
-                    const el = document.getElementById('transcript');
-                    el.textContent += data.text + ' ';
-                    el.scrollTop = el.scrollHeight;
-                }
-
-                if (data.type === 'status') {
-                    setStatus(data.text, data.text.includes('Illustrating') ? 'active' : '');
-                }
-            };
-
-            ws.onclose = () => {
-                setTimeout(connectWebSocket, 2000);
-            };
-        }
-
-        function toggleMic() {
-            if (listening) {
-                stopListening();
-            } else {
-                startListening();
-            }
-        }
-
-        function startListening() {
-            if (!warmedUp) {
-                setStatus('Load models first before listening.');
-                return;
-            }
-
-            if (!ws || ws.readyState !== WebSocket.OPEN) {
-                setStatus('Connecting...');
-                connectWebSocket();
-                setTimeout(startListening, 1000);
-                return;
-            }
-
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (!SpeechRecognition) {
-                setStatus('Speech recognition not supported. Use Chrome or Edge.');
-                return;
-            }
-
-            recognition = new SpeechRecognition();
-            recognition.continuous = true;
-            recognition.interimResults = false;
-            recognition.lang = 'en-US';
-
-            recognition.onresult = (event) => {
-                for (let i = event.resultIndex; i < event.results.length; i++) {
-                    if (event.results[i].isFinal) {
-                        const text = event.results[i][0].transcript;
-                        if (ws && ws.readyState === WebSocket.OPEN) {
-                            ws.send(JSON.stringify({ type: 'transcript', text: text }));
-                        }
+    function waitForCompletion(promptId) {
+        return new Promise((resolve) => {
+            function handler(event) {
+                if (typeof event.data !== 'string') return;
+                try {
+                    const msg = JSON.parse(event.data);
+                    if (msg.type === 'progress') {
+                        setStatus(`Rendering step ${msg.data.value}/${msg.data.max}...`, 'active');
                     }
-                }
-            };
-
-            recognition.onend = () => {
-                if (listening) {
-                    recognition.start();
-                }
-            };
-
-            recognition.onerror = (event) => {
-                console.error('Speech error:', event.error);
-                if (event.error === 'not-allowed') {
-                    setStatus('Microphone access denied. Allow it in browser settings.');
-                    stopListening();
-                }
-            };
-
-            recognition.start();
-            listening = true;
-
-            document.getElementById('micBtn').classList.add('active');
-            document.getElementById('micBtn').innerHTML =
-                '<span class="mic-indicator listening" id="micDot"></span> Listening...';
-            setStatus('Listening... Start reading aloud.');
-            document.getElementById('transcript').textContent = '';
-        }
-
-        function stopListening() {
-            listening = false;
-            if (recognition) {
-                recognition.stop();
-                recognition = null;
+                    if (msg.type === 'executing' && msg.data.node === null && msg.data.prompt_id === promptId) {
+                        comfyWs.removeEventListener('message', handler);
+                        resolve();
+                    }
+                } catch (e) {}
             }
+            comfyWs.addEventListener('message', handler);
+        });
+    }
 
-            document.getElementById('micBtn').classList.remove('active');
-            document.getElementById('micBtn').innerHTML =
-                '<span class="mic-indicator" id="micDot"></span> Start Listening';
-            setStatus('Stopped.');
+    async function generateImage(promptText) {
+        const promptId = await queuePrompt(promptText);
+        await waitForCompletion(promptId);
+        return await getImage(promptId);
+    }
+
+    // -- Scene extraction --
+    function extractScene(texts) {
+        const combined = texts.slice(-3).join(' ').toLowerCase();
+        const found = {};
+        for (const [cat, words] of Object.entries(KEYWORDS)) {
+            found[cat] = words.filter(w => combined.includes(w));
         }
 
-        // Init
-        connectWebSocket();
-        checkStatus();
+        if (!found.settings.length && !found.characters.length) return null;
+
+        const parts = [];
+        if (found.atmosphere.length) parts.push(found.atmosphere.join(', '));
+        if (found.settings.length) parts.push(found.settings.join(', '));
+        if (found.characters.length) {
+            let s = found.characters.join(', ');
+            if (found.actions.length) s += ' ' + found.actions.join(', ');
+            parts.push(s);
+        }
+
+        return `${STYLE}, ${parts.join(', ')}`;
+    }
+
+    // -- Warm-up --
+    async function warmUp() {
+        const btn = document.getElementById('warmupBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Loading...';
+        setStatus('Loading models into memory (first run takes 15-30s)...', 'warming');
+
+        try {
+            // Check ComfyUI is reachable
+            await fetch(`${COMFY}/system_stats`);
+        } catch (e) {
+            btn.disabled = false;
+            btn.textContent = 'Retry Load';
+            setStatus('Cannot reach ComfyUI at localhost:8188. Run the launch script first.', 'error');
+            return;
+        }
+
+        try {
+            connectComfyWs();
+            // Wait for ws to open
+            await new Promise((resolve, reject) => {
+                const check = setInterval(() => {
+                    if (comfyWs.readyState === WebSocket.OPEN) {
+                        clearInterval(check);
+                        resolve();
+                    }
+                }, 200);
+                setTimeout(() => { clearInterval(check); reject(new Error('ws timeout')); }, 5000);
+            });
+
+            // Run throwaway generation to load models
+            const url = await generateImage('a simple test, solid blue background');
+            if (url) {
+                warmedUp = true;
+                btn.classList.add('ready');
+                btn.disabled = true;
+                btn.textContent = 'Models Ready';
+                document.getElementById('micBtn').disabled = false;
+                document.getElementById('placeholder').innerHTML =
+                    'Models loaded. Click "Start Listening" and read aloud.';
+                setStatus('Ready. Click "Start Listening" to begin.');
+            } else {
+                throw new Error('No image returned');
+            }
+        } catch (e) {
+            console.error('Warmup error:', e);
+            btn.disabled = false;
+            btn.textContent = 'Retry Load';
+            setStatus('Failed to load models: ' + e.message, 'error');
+        }
+    }
+
+    // -- Speech + generation loop --
+    async function onTranscript(text) {
+        if (!text || text.split(' ').length < 3) return;
+
+        sentences.push(text);
+        const el = document.getElementById('transcript');
+        el.textContent += text + ' ';
+        el.scrollTop = el.scrollHeight;
+
+        const now = Date.now();
+        if (now - lastGenTime < SCENE_COOLDOWN || generating) return;
+
+        const totalWords = sentences.slice(-3).reduce((n, s) => n + s.split(' ').length, 0);
+        if (totalWords < MIN_WORDS) return;
+
+        const prompt = extractScene(sentences);
+        if (!prompt || prompt === lastPrompt) return;
+
+        generating = true;
+        lastPrompt = prompt;
+        lastGenTime = now;
+
+        setStatus(`Illustrating: ${prompt.slice(0, 60)}...`, 'active');
+
+        try {
+            const url = await generateImage(prompt);
+            if (url) {
+                const img = document.getElementById('illustration');
+                img.src = url;
+                img.classList.add('visible');
+                document.getElementById('placeholder').style.display = 'none';
+                setStatus('Listening... Keep reading.');
+            }
+        } catch (e) {
+            console.error('Generation error:', e);
+            setStatus('Generation error. Keep reading, will retry.');
+        }
+
+        generating = false;
+    }
+
+    function toggleMic() {
+        listening ? stopListening() : startListening();
+    }
+
+    function startListening() {
+        if (!warmedUp) { setStatus('Load models first.'); return; }
+
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) { setStatus('Speech recognition not supported. Use Chrome or Edge.'); return; }
+
+        recognition = new SR();
+        recognition.continuous = true;
+        recognition.interimResults = false;
+        recognition.lang = 'en-US';
+
+        recognition.onresult = (e) => {
+            for (let i = e.resultIndex; i < e.results.length; i++) {
+                if (e.results[i].isFinal) onTranscript(e.results[i][0].transcript);
+            }
+        };
+        recognition.onend = () => { if (listening) recognition.start(); };
+        recognition.onerror = (e) => {
+            if (e.error === 'not-allowed') {
+                setStatus('Microphone access denied. Allow it in browser settings.', 'error');
+                stopListening();
+            }
+        };
+
+        recognition.start();
+        listening = true;
+
+        document.getElementById('micBtn').classList.add('active');
+        document.getElementById('micBtn').innerHTML =
+            '<span class="mic-indicator listening"></span> Listening...';
+        setStatus('Listening... Start reading aloud.');
+        document.getElementById('transcript').textContent = '';
+    }
+
+    function stopListening() {
+        listening = false;
+        if (recognition) { recognition.stop(); recognition = null; }
+        document.getElementById('micBtn').classList.remove('active');
+        document.getElementById('micBtn').innerHTML =
+            '<span class="mic-indicator"></span> Start Listening';
+        setStatus('Stopped.');
+    }
+
+    function toggleStory() {
+        const p = document.getElementById('storyPanel');
+        if (p.classList.contains('visible')) {
+            p.classList.remove('visible');
+        } else {
+            document.getElementById('storyContent').innerHTML =
+                STORY.split('\n\n').map(s => `<p>${s}</p>`).join('');
+            p.classList.add('visible');
+        }
+    }
+
+    function setStatus(text, cls) {
+        const el = document.getElementById('status');
+        el.textContent = text;
+        el.className = cls ? `status ${cls}` : 'status';
+    }
     </script>
 </body>
 </html>
