@@ -60,6 +60,8 @@
         .btn.warmup { background: #1a3a1a; border-color: #4a9c4a; color: #a0e0a0; }
         .btn.warmup:hover { background: #1a4a1a; }
         .btn.warmup.ready { opacity: 0.6; }
+        .btn.shutdown { background: #3a1a1a; border-color: #9c4a4a; color: #e0a0a0; }
+        .btn.shutdown:hover { background: #4a1a1a; }
 
         .main {
             flex: 1;
@@ -239,6 +241,7 @@
                 <span class="mic-indicator" id="micDot"></span>
                 Start Listening
             </button>
+            <button class="btn shutdown" onclick="shutdown()">Unload</button>
         </div>
     </div>
 
@@ -637,6 +640,26 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
         } else {
             panel.classList.remove('visible');
             btn.textContent = 'Show Story';
+        }
+    }
+
+    async function shutdown() {
+        if (listening) stopListening();
+        setStatus('Unloading models...', 'warming');
+        try {
+            await fetch(`${COMFY}/free`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ unload_models: true, free_memory: true })
+            });
+            warmedUp = false;
+            document.getElementById('warmupBtn').classList.remove('ready');
+            document.getElementById('warmupBtn').disabled = false;
+            document.getElementById('warmupBtn').textContent = 'Load Models';
+            document.getElementById('micBtn').disabled = true;
+            setStatus('Models unloaded. GPU memory freed.');
+        } catch (e) {
+            setStatus('Unload failed: ' + e.message, 'error');
         }
     }
 
