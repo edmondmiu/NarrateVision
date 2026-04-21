@@ -560,11 +560,12 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
         generating = false;
     }
 
-    function toggleMic() {
-        listening ? stopListening() : startListening();
+    async function toggleMic() {
+        if (listening) stopListening();
+        else await startListening();
     }
 
-    function startListening() {
+    async function startListening() {
         if (!hasKey()) {
             setStatus('Add your fal.ai API key in Settings first.', 'error');
             openSettings();
@@ -572,12 +573,29 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
         }
 
         const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SR) { setStatus('Speech recognition not supported. Use Chrome or Edge.', 'error'); return; }
+        if (!SR) { setStatus('Speech recognition not supported. Use Chrome or Edge (desktop).', 'error'); return; }
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            stream.getTracks().forEach(t => t.stop());
+        } catch (err) {
+            setStatus('Microphone access denied. Click the mic icon in the URL bar and allow it.', 'error');
+            console.error('getUserMedia failed:', err);
+            return;
+        }
 
         recognition = new SR();
         recognition.continuous = true;
         recognition.interimResults = true;
         recognition.lang = 'en-US';
+
+        recognition.onstart = () => {
+            console.log('[SR] started');
+            setStatus('Listening... Start reading aloud.');
+            document.getElementById('micBtn').classList.add('active');
+            document.getElementById('micBtn').innerHTML =
+                '<span class="mic-indicator listening"></span> Listening...';
+        };
 
         recognition.onresult = (e) => {
             let interim = '';
@@ -591,21 +609,43 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
             }
             updateTranscriptBanner(interim);
         };
-        recognition.onend = () => { if (listening) recognition.start(); };
-        recognition.onerror = (e) => {
-            if (e.error === 'not-allowed') {
-                setStatus('Microphone access denied. Allow it in browser settings.', 'error');
-                stopListening();
+
+        recognition.onend = () => {
+            console.log('[SR] ended, listening=', listening);
+            if (listening) {
+                setTimeout(() => {
+                    if (listening && recognition) {
+                        try { recognition.start(); } catch (err) { console.warn('[SR] restart failed:', err); }
+                    }
+                }, 100);
             }
         };
 
-        recognition.start();
-        listening = true;
+        recognition.onerror = (e) => {
+            console.error('[SR] error:', e.error, e);
+            if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+                setStatus('Microphone access denied. Allow it in browser settings.', 'error');
+                stopListening();
+            } else if (e.error === 'no-speech') {
+                // expected between utterances, ignore
+            } else if (e.error === 'audio-capture') {
+                setStatus('No microphone found.', 'error');
+                stopListening();
+            } else if (e.error === 'network') {
+                setStatus('Speech recognition needs internet. Check your connection.', 'error');
+            } else {
+                setStatus(`Speech error: ${e.error}`, 'error');
+            }
+        };
 
-        document.getElementById('micBtn').classList.add('active');
-        document.getElementById('micBtn').innerHTML =
-            '<span class="mic-indicator listening"></span> Listening...';
-        setStatus('Listening... Start reading aloud.');
+        listening = true;
+        try {
+            recognition.start();
+        } catch (err) {
+            console.error('[SR] start failed:', err);
+            setStatus('Could not start listening: ' + err.message, 'error');
+            listening = false;
+        }
     }
 
     function stopListening() {
