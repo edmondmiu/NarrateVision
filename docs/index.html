@@ -199,6 +199,25 @@
             white-space: nowrap;
         }
 
+        .transcript-banner {
+            padding: 14px 20px;
+            background: #0e0e22;
+            border-bottom: 1px solid #1e1e3a;
+            font-size: 16px;
+            line-height: 1.5;
+            color: #c8c8e0;
+            min-height: 52px;
+            max-height: 120px;
+            overflow-y: auto;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .transcript-banner .final { color: #c8c8e0; }
+        .transcript-banner .interim { color: #6a6a9a; font-style: italic; }
+        .transcript-banner .empty { color: #3a3a5c; font-style: italic; }
+
         .mic-indicator {
             width: 10px; height: 10px;
             border-radius: 50%;
@@ -305,6 +324,10 @@
         </div>
     </div>
 
+    <div class="transcript-banner" id="transcriptBanner">
+        <span class="empty">Your words will appear here as you speak.</span>
+    </div>
+
     <div class="main">
         <div class="story-panel" id="storyPanel">
             <div class="story-text" id="storyContent"></div>
@@ -363,7 +386,7 @@
     const MIN_WORDS = 6;
     const STYLE = 'storybook illustration, watercolor style, detailed, warm lighting';
     const NEG = 'blurry, ugly, deformed, text, watermark, low quality';
-    const FAL_ENDPOINT = 'https://fal.run/fal-ai/fast-lightning-sdxl';
+    const FAL_ENDPOINT = 'https://fal.run/fal-ai/fast-sdxl';
 
     const KEYWORDS = {
         settings: ['forest','castle','mountain','ocean','sea','river','lake','village','city','cave','desert','garden','house','room','sky','field','road','bridge','tower','palace','church','school','market','beach','island','valley','hill','cliff','dungeon','temple','library','kitchen','bedroom','street','lighthouse','harbour','boat','ship','stairs','window'],
@@ -496,6 +519,7 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
 
         sentences.push(text);
         document.getElementById('transcript').textContent = text;
+        updateTranscriptBanner('');
 
         const now = Date.now();
         if (now - lastGenTime < SCENE_COOLDOWN || generating) return;
@@ -552,13 +576,20 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
 
         recognition = new SR();
         recognition.continuous = true;
-        recognition.interimResults = false;
+        recognition.interimResults = true;
         recognition.lang = 'en-US';
 
         recognition.onresult = (e) => {
+            let interim = '';
             for (let i = e.resultIndex; i < e.results.length; i++) {
-                if (e.results[i].isFinal) onTranscript(e.results[i][0].transcript);
+                const r = e.results[i];
+                if (r.isFinal) {
+                    onTranscript(r[0].transcript);
+                } else {
+                    interim += r[0].transcript;
+                }
             }
+            updateTranscriptBanner(interim);
         };
         recognition.onend = () => { if (listening) recognition.start(); };
         recognition.onerror = (e) => {
@@ -634,6 +665,21 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
         const el = document.getElementById('status');
         el.textContent = text;
         el.className = cls ? `status ${cls}` : 'status';
+    }
+
+    function updateTranscriptBanner(interim) {
+        const el = document.getElementById('transcriptBanner');
+        const recent = sentences.slice(-2).join(' ');
+        let html = '';
+        if (recent) html += `<span class="final">${escapeHtml(recent)}</span> `;
+        if (interim) html += `<span class="interim">${escapeHtml(interim)}</span>`;
+        if (!html) html = '<span class="empty">Your words will appear here as you speak.</span>';
+        el.innerHTML = html;
+        el.scrollTop = el.scrollHeight;
+    }
+
+    function escapeHtml(s) {
+        return s.replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
     }
 
     if (hasKey()) {
