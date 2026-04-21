@@ -57,11 +57,8 @@
         .btn.active { background: #2a1a3a; border-color: #8a4a9c; color: #d0a0e0; }
         .btn.story { background: #1a2a3a; border-color: #4a7a9c; color: #a0d0e0; }
         .btn.story:hover { background: #1a3a4a; }
-        .btn.warmup { background: #1a3a1a; border-color: #4a9c4a; color: #a0e0a0; }
-        .btn.warmup:hover { background: #1a4a1a; }
-        .btn.warmup.ready { opacity: 0.6; }
-        .btn.shutdown { background: #3a1a1a; border-color: #9c4a4a; color: #e0a0a0; }
-        .btn.shutdown:hover { background: #4a1a1a; }
+        .btn.settings { background: #2a2a1a; border-color: #7a7a4a; color: #d0d0a0; }
+        .btn.settings:hover { background: #3a3a1a; }
 
         .main {
             flex: 1;
@@ -145,7 +142,6 @@
 
         .gen-indicator.active { display: flex; align-items: center; gap: 8px; }
 
-        /* History strip */
         .history-strip {
             display: flex;
             gap: 8px;
@@ -222,12 +218,77 @@
         .spinner {
             display: inline-block;
             width: 10px; height: 10px;
-            border: 2px solid #4a9c4a;
+            border: 2px solid #a0a0c0;
             border-top-color: transparent;
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
             margin-right: 8px;
             vertical-align: middle;
+        }
+
+        /* Modal */
+        .modal-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .modal-backdrop.visible { display: flex; }
+
+        .modal {
+            background: #12122a;
+            border: 1px solid #3a3a5c;
+            border-radius: 12px;
+            padding: 28px;
+            max-width: 480px;
+            width: 90%;
+            box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+        }
+
+        .modal h2 {
+            font-size: 18px;
+            font-weight: 400;
+            color: #d0d0e8;
+            margin-bottom: 16px;
+        }
+
+        .modal p {
+            font-size: 14px;
+            line-height: 1.6;
+            color: #9090b0;
+            margin-bottom: 16px;
+        }
+
+        .modal a { color: #8a9ae0; text-decoration: underline; }
+
+        .modal input {
+            width: 100%;
+            padding: 10px 14px;
+            background: #0a0a1a;
+            border: 1px solid #3a3a5c;
+            border-radius: 6px;
+            color: #e0e0e0;
+            font-family: monospace;
+            font-size: 14px;
+            margin-bottom: 16px;
+        }
+
+        .modal input:focus { outline: none; border-color: #5a5a8c; }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .note {
+            font-size: 12px;
+            color: #6a6a8c;
+            margin-top: 12px;
         }
     </style>
 </head>
@@ -235,13 +296,12 @@
     <div class="header">
         <h1>NarrateVision</h1>
         <div class="controls">
-            <button class="btn warmup" id="warmupBtn" onclick="warmUp()">Load Models</button>
+            <button class="btn settings" onclick="openSettings()">Settings</button>
             <button class="btn story" id="storyBtn" onclick="toggleStory()">Show Story</button>
-            <button class="btn" id="micBtn" onclick="toggleMic()" disabled>
+            <button class="btn" id="micBtn" onclick="toggleMic()">
                 <span class="mic-indicator" id="micDot"></span>
                 Start Listening
             </button>
-            <button class="btn shutdown" onclick="shutdown()">Unload</button>
         </div>
     </div>
 
@@ -254,11 +314,11 @@
             <div class="canvas-wrap">
                 <img id="illustration" alt="" />
                 <div class="placeholder" id="placeholder">
-                    Click "Load Models" to warm up.<br>
-                    Then start listening and read aloud.
+                    Click "Start Listening" and read aloud.<br>
+                    Scenes will appear as you narrate.
                 </div>
                 <div class="gen-indicator" id="genIndicator">
-                    <span class="spinner" style="border-color: #a0a0c0; border-top-color: transparent;"></span>
+                    <span class="spinner"></span>
                     Drawing...
                 </div>
             </div>
@@ -268,19 +328,42 @@
     </div>
 
     <div class="footer">
-        <div class="status" id="status">Click "Load Models" to get ready.</div>
+        <div class="status" id="status">Add your fal.ai API key in Settings to begin.</div>
         <div class="transcript-bar" id="transcript"></div>
     </div>
 
-    <script>
-    const COMFY = 'http://127.0.0.1:8188';
-    const COMFY_WS = 'ws://127.0.0.1:8188/ws';
-    const CLIENT_ID = crypto.randomUUID();
+    <div class="modal-backdrop" id="settingsModal">
+        <div class="modal">
+            <h2>fal.ai API key</h2>
+            <p>
+                NarrateVision uses <a href="https://fal.ai" target="_blank" rel="noopener">fal.ai</a> to generate illustrations.
+                Sign up, grab your key from the <a href="https://fal.ai/dashboard/keys" target="_blank" rel="noopener">dashboard</a>, and paste it here.
+                Each image costs roughly $0.002 and takes 1-2 seconds.
+            </p>
+            <input
+                type="password"
+                id="keyInput"
+                placeholder="fal_..."
+                autocomplete="off"
+                spellcheck="false"
+            />
+            <div class="modal-actions">
+                <button class="btn" onclick="clearKey()">Forget key</button>
+                <button class="btn" onclick="closeSettings()">Cancel</button>
+                <button class="btn active" onclick="saveKey()">Save</button>
+            </div>
+            <p class="note">
+                Your key is stored in this browser only (localStorage). It never leaves your machine except in requests to fal.ai.
+            </p>
+        </div>
+    </div>
 
+    <script>
     const SCENE_COOLDOWN = 2000;
     const MIN_WORDS = 6;
     const STYLE = 'storybook illustration, watercolor style, detailed, warm lighting';
     const NEG = 'blurry, ugly, deformed, text, watermark, low quality';
+    const FAL_ENDPOINT = 'https://fal.run/fal-ai/fast-lightning-sdxl';
 
     const KEYWORDS = {
         settings: ['forest','castle','mountain','ocean','sea','river','lake','village','city','cave','desert','garden','house','room','sky','field','road','bridge','tower','palace','church','school','market','beach','island','valley','hill','cliff','dungeon','temple','library','kitchen','bedroom','street','lighthouse','harbour','boat','ship','stairs','window'],
@@ -303,132 +386,56 @@ As the boat reached the harbour, the old woman smiled and poured herself a cup o
 
 By morning the sea was calm and blue. Seagulls circled the lighthouse in the bright sunshine. The fisherman walked up the cliff path carrying a basket of fresh fish, a gift for the keeper who had saved his life in the dark and stormy night.`;
 
-    let warmedUp = false;
     let listening = false;
     let recognition = null;
     let generating = false;
     let lastGenTime = 0;
     let lastPrompt = null;
     let sentences = [];
-    let comfyWs = null;
     let storyVisible = false;
-    let history = [];  // { url, prompt }
+    let history = [];
     let currentHistoryIdx = -1;
 
-    function makeWorkflow(prompt) {
-        return {
-            "3": {
-                class_type: "KSampler",
-                inputs: {
-                    seed: Math.floor(Math.random() * 2**32),
-                    steps: 1, cfg: 1.0,
-                    sampler_name: "euler", scheduler: "normal",
-                    denoise: 1.0,
-                    model: ["10", 0],
-                    positive: ["6", 0], negative: ["7", 0],
-                    latent_image: ["5", 0]
-                }
-            },
-            "4": {
-                class_type: "CheckpointLoaderSimple",
-                inputs: { ckpt_name: "v1-5-pruned-emaonly-fp16.safetensors" }
-            },
-            "5": {
-                class_type: "EmptyLatentImage",
-                inputs: { width: 256, height: 256, batch_size: 1 }
-            },
-            "6": {
-                class_type: "CLIPTextEncode",
-                inputs: { text: prompt, clip: ["10", 1] }
-            },
-            "7": {
-                class_type: "CLIPTextEncode",
-                inputs: { text: NEG, clip: ["10", 1] }
-            },
-            "8": {
-                class_type: "VAEDecode",
-                inputs: { samples: ["3", 0], vae: ["4", 2] }
-            },
-            "9": {
-                class_type: "SaveImage",
-                inputs: { filename_prefix: "narrate", images: ["8", 0] }
-            },
-            "10": {
-                class_type: "LoraLoader",
-                inputs: {
-                    lora_name: "Hyper-SD15-1step-lora.safetensors",
-                    strength_model: 1.0, strength_clip: 1.0,
-                    model: ["4", 0], clip: ["4", 1]
-                }
-            }
-        };
+    function getKey() {
+        return localStorage.getItem('narratevision_fal_key') || '';
     }
 
-    async function queuePrompt(promptText) {
-        const resp = await fetch(`${COMFY}/prompt`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt: makeWorkflow(promptText), client_id: CLIENT_ID })
-        });
-        const data = await resp.json();
-        return data.prompt_id;
-    }
-
-    async function getImage(promptId) {
-        const resp = await fetch(`${COMFY}/history/${promptId}`);
-        const history = await resp.json();
-        if (!history[promptId]) return null;
-
-        const outputs = history[promptId].outputs || {};
-        const status = history[promptId].status || {};
-        if (status.status_str === 'error') {
-            const msgs = status.messages || [];
-            for (const msg of msgs) {
-                if (msg[0] === 'execution_error') {
-                    throw new Error(msg[1].exception_message || 'Generation failed');
-                }
-            }
-        }
-
-        for (const nodeId in outputs) {
-            const images = outputs[nodeId].images;
-            if (images && images.length > 0) {
-                const img = images[0];
-                return `${COMFY}/view?filename=${encodeURIComponent(img.filename)}&subfolder=${encodeURIComponent(img.subfolder || '')}&type=${encodeURIComponent(img.type || 'output')}`;
-            }
-        }
-        return null;
-    }
-
-    function connectComfyWs() {
-        comfyWs = new WebSocket(`${COMFY_WS}?clientId=${CLIENT_ID}`);
-        comfyWs.onclose = () => setTimeout(connectComfyWs, 3000);
-        comfyWs.onerror = () => {};
-    }
-
-    function waitForCompletion(promptId) {
-        return new Promise((resolve) => {
-            function handler(event) {
-                if (typeof event.data !== 'string') return;
-                try {
-                    const msg = JSON.parse(event.data);
-                    if (msg.type === 'progress') {
-                        setStatus(`Rendering step ${msg.data.value}/${msg.data.max}...`, 'active');
-                    }
-                    if (msg.type === 'executing' && msg.data.node === null && msg.data.prompt_id === promptId) {
-                        comfyWs.removeEventListener('message', handler);
-                        resolve();
-                    }
-                } catch (e) {}
-            }
-            comfyWs.addEventListener('message', handler);
-        });
+    function hasKey() {
+        return !!getKey();
     }
 
     async function generateImage(promptText) {
-        const promptId = await queuePrompt(promptText);
-        await waitForCompletion(promptId);
-        return await getImage(promptId);
+        const key = getKey();
+        if (!key) throw new Error('No API key. Open Settings to add one.');
+
+        const resp = await fetch(FAL_ENDPOINT, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Key ${key}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                prompt: promptText,
+                negative_prompt: NEG,
+                image_size: 'square',
+                num_inference_steps: 4,
+                num_images: 1,
+                enable_safety_checker: true,
+            }),
+        });
+
+        if (!resp.ok) {
+            const text = await resp.text();
+            if (resp.status === 401 || resp.status === 403) {
+                throw new Error('Invalid API key. Check Settings.');
+            }
+            throw new Error(`fal.ai error ${resp.status}: ${text.slice(0, 120)}`);
+        }
+
+        const data = await resp.json();
+        const url = data.images && data.images[0] && data.images[0].url;
+        if (!url) throw new Error('No image returned');
+        return url;
     }
 
     function extractScene(texts) {
@@ -452,7 +459,6 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
         return `${STYLE}, ${parts.join(', ')}`;
     }
 
-    // -- History --
     function addToHistory(url, prompt) {
         history.push({ url, prompt });
         currentHistoryIdx = history.length - 1;
@@ -485,53 +491,6 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
         strip.scrollLeft = strip.scrollWidth;
     }
 
-    // -- Warm-up --
-    async function warmUp() {
-        const btn = document.getElementById('warmupBtn');
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner"></span> Loading...';
-        setStatus('Loading models into memory (first run takes 15-30s)...', 'warming');
-
-        try {
-            await fetch(`${COMFY}/system_stats`);
-        } catch (e) {
-            btn.disabled = false;
-            btn.textContent = 'Retry Load';
-            setStatus('Cannot reach ComfyUI at localhost:8188. Run the launch script first.', 'error');
-            return;
-        }
-
-        try {
-            connectComfyWs();
-            await new Promise((resolve, reject) => {
-                const check = setInterval(() => {
-                    if (comfyWs.readyState === WebSocket.OPEN) { clearInterval(check); resolve(); }
-                }, 200);
-                setTimeout(() => { clearInterval(check); reject(new Error('WebSocket timeout')); }, 5000);
-            });
-
-            const url = await generateImage('a simple test, solid blue background');
-            if (url) {
-                warmedUp = true;
-                btn.classList.add('ready');
-                btn.disabled = true;
-                btn.textContent = 'Models Ready';
-                document.getElementById('micBtn').disabled = false;
-                document.getElementById('placeholder').innerHTML =
-                    'Models loaded. Click "Start Listening" and read aloud.';
-                setStatus('Ready. Click "Start Listening" to begin.');
-            } else {
-                throw new Error('No image returned');
-            }
-        } catch (e) {
-            console.error('Warmup error:', e);
-            btn.disabled = false;
-            btn.textContent = 'Retry Load';
-            setStatus('Failed to load models: ' + e.message, 'error');
-        }
-    }
-
-    // -- Speech + generation --
     async function onTranscript(text) {
         if (!text || text.split(' ').length < 3) return;
 
@@ -554,28 +513,24 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
         const img = document.getElementById('illustration');
         const indicator = document.getElementById('genIndicator');
 
-        if (img.classList.contains('visible')) {
-            img.classList.add('generating');
-        }
+        if (img.classList.contains('visible')) img.classList.add('generating');
         indicator.classList.add('active');
-        setStatus(`Illustrating...`, 'active');
+        setStatus('Illustrating...', 'active');
 
         try {
             const url = await generateImage(prompt);
-            if (url) {
-                img.classList.remove('generating');
-                img.src = url;
-                img.classList.add('visible');
-                document.getElementById('placeholder').style.display = 'none';
-                indicator.classList.remove('active');
-                addToHistory(url, prompt);
-                setStatus('Listening... Keep reading.');
-            }
+            img.classList.remove('generating');
+            img.src = url;
+            img.classList.add('visible');
+            document.getElementById('placeholder').style.display = 'none';
+            indicator.classList.remove('active');
+            addToHistory(url, prompt);
+            setStatus('Listening... Keep reading.');
         } catch (e) {
             console.error('Generation error:', e);
             img.classList.remove('generating');
             indicator.classList.remove('active');
-            setStatus('Generation error. Keep reading, will retry.');
+            setStatus(e.message, 'error');
         }
 
         generating = false;
@@ -586,10 +541,14 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
     }
 
     function startListening() {
-        if (!warmedUp) { setStatus('Load models first.'); return; }
+        if (!hasKey()) {
+            setStatus('Add your fal.ai API key in Settings first.', 'error');
+            openSettings();
+            return;
+        }
 
         const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SR) { setStatus('Speech recognition not supported. Use Chrome or Edge.'); return; }
+        if (!SR) { setStatus('Speech recognition not supported. Use Chrome or Edge.', 'error'); return; }
 
         recognition = new SR();
         recognition.continuous = true;
@@ -643,30 +602,44 @@ By morning the sea was calm and blue. Seagulls circled the lighthouse in the bri
         }
     }
 
-    async function shutdown() {
-        if (listening) stopListening();
-        setStatus('Unloading models...', 'warming');
-        try {
-            await fetch(`${COMFY}/free`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ unload_models: true, free_memory: true })
-            });
-            warmedUp = false;
-            document.getElementById('warmupBtn').classList.remove('ready');
-            document.getElementById('warmupBtn').disabled = false;
-            document.getElementById('warmupBtn').textContent = 'Load Models';
-            document.getElementById('micBtn').disabled = true;
-            setStatus('Models unloaded. GPU memory freed.');
-        } catch (e) {
-            setStatus('Unload failed: ' + e.message, 'error');
+    function openSettings() {
+        const modal = document.getElementById('settingsModal');
+        document.getElementById('keyInput').value = getKey();
+        modal.classList.add('visible');
+        document.getElementById('keyInput').focus();
+    }
+
+    function closeSettings() {
+        document.getElementById('settingsModal').classList.remove('visible');
+    }
+
+    function saveKey() {
+        const val = document.getElementById('keyInput').value.trim();
+        if (!val) {
+            setStatus('Key is empty.', 'error');
+            return;
         }
+        localStorage.setItem('narratevision_fal_key', val);
+        closeSettings();
+        setStatus('Key saved. Click "Start Listening" to begin.');
+    }
+
+    function clearKey() {
+        localStorage.removeItem('narratevision_fal_key');
+        document.getElementById('keyInput').value = '';
+        setStatus('Key cleared. Add a new one to continue.', 'error');
     }
 
     function setStatus(text, cls) {
         const el = document.getElementById('status');
         el.textContent = text;
         el.className = cls ? `status ${cls}` : 'status';
+    }
+
+    if (hasKey()) {
+        setStatus('Ready. Click "Start Listening" to begin.');
+    } else {
+        openSettings();
     }
     </script>
 </body>

@@ -1,118 +1,67 @@
 # NarrateVision
 
-Speak or read aloud and watch scenes illustrated in real-time. Fully local on Apple Silicon — no cloud APIs, no data leaves your machine.
+Speak or read aloud and watch scenes illustrated in real-time. Runs entirely in the browser — no server, no install. Bring your own fal.ai API key.
 
-Designed for reading stories to kids: one person narrates, the screen fills with storybook illustrations that update as the scene changes.
+## Try it
+
+1. Open the site.
+2. Sign up at [fal.ai](https://fal.ai) and grab your key from the [dashboard](https://fal.ai/dashboard/keys).
+3. Paste it into **Settings**. The key is stored in your browser's localStorage and only ever sent to fal.ai.
+4. Click **Start Listening** and read aloud. Illustrations appear every couple of seconds as the scene changes.
+
+Each image costs roughly $0.002 on fal.ai and takes 1-2 seconds to generate.
 
 ## How it works
 
 ```
 Browser mic (Web Speech API)
-        ↓  WebSocket
-  Python server (FastAPI)
-        ↓  extract visual keywords
-  Scene extractor
+        ↓  transcript
+  Scene extractor (keyword match)
         ↓  prompt
-  ComfyUI (SD 1.5 + Hyper-SD 1-step LoRA)
-        ↓  512x512 PNG
+  fal.ai fast-lightning-sdxl
+        ↓  image URL
   Browser display (fade-in)
 ```
 
-1. Chrome captures speech via the Web Speech API (transcription happens in the browser, zero server-side audio processing).
-2. Transcripts stream over a WebSocket to the Python server.
-3. A scene extractor picks out characters, settings, and atmosphere from the rolling transcript.
-4. ComfyUI generates a storybook-style illustration in a single diffusion step (~2-4 seconds on M1 Pro).
-5. The image streams back to the browser and fades in.
+1. Chrome captures speech via the Web Speech API. Transcription happens locally in the browser.
+2. A small keyword-based scene extractor picks out characters, settings, actions, and atmosphere from the rolling transcript.
+3. The extracted scene becomes a prompt sent to [fal.ai/fast-lightning-sdxl](https://fal.ai/models/fal-ai/fast-lightning-sdxl).
+4. The returned image URL fades into view. Thumbnails of previous scenes appear in a strip below.
 
 ## Requirements
 
-- macOS with Apple Silicon (tested on M1 Pro, 32GB)
-- Python 3.10+
-- [ComfyUI](https://github.com/comfyanonymous/ComfyUI) installed and runnable
-- Chrome or Edge (Web Speech API is not available in Safari or Firefox)
+- Chrome or Edge (Web Speech API is not available in Safari or Firefox).
+- A fal.ai account with credits.
 
-## Setup
+That's it. No Python, no GPU, no ComfyUI.
 
-### 1. Install NarrateVision
+## Local development
 
 ```bash
 git clone https://github.com/edmondmiu/NarrateVision.git
 cd NarrateVision
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+# Open public/index.html with any static server, e.g.
+npx serve public
 ```
 
-### 2. Download models into ComfyUI
+## Deploy
 
-SD 1.5 base checkpoint (2.1GB):
+Deployed via Firebase Hosting on the `edmondmiu@gmail.com` account. To deploy your own copy:
 
 ```bash
-cd /path/to/ComfyUI/models/checkpoints/
-curl -L -o v1-5-pruned-emaonly-fp16.safetensors \
-  "https://huggingface.co/Comfy-Org/stable-diffusion-v1-5-archive/resolve/main/v1-5-pruned-emaonly-fp16.safetensors"
+npm install -g firebase-tools
+firebase login
+firebase init hosting   # pick an existing project or create one, use `public` as the directory
+firebase deploy
 ```
-
-Hyper-SD 1-step LoRA (257MB):
-
-```bash
-cd /path/to/ComfyUI/models/loras/
-curl -L -o Hyper-SD15-1step-lora.safetensors \
-  "https://huggingface.co/ByteDance/Hyper-SD/resolve/main/Hyper-SD15-1step-lora.safetensors"
-```
-
-## Usage
-
-1. Start ComfyUI:
-
-   ```bash
-   cd /path/to/ComfyUI
-   python3 main.py
-   ```
-
-2. In a separate terminal, start NarrateVision:
-
-   ```bash
-   cd NarrateVision
-   source venv/bin/activate
-   python3 server.py
-   ```
-
-3. Open `http://localhost:8765` in Chrome or Edge.
-
-4. Click **Start Listening** and begin reading aloud. Or click **Read a Story** for a built-in sample.
-
-5. When you're done, click **Unload** to free GPU memory.
 
 ## Project layout
 
 | File | Purpose |
 |---|---|
-| `server.py` | FastAPI server: serves the UI and handles WebSocket transcripts |
-| `narrate.py` | Standalone desktop mode using PyQt + mlx-whisper (alternative to browser) |
-| `comfyui_client.py` | Talks to ComfyUI over HTTP + WebSocket, builds the workflow JSON |
-| `scene_extractor.py` | Picks visual keywords from the rolling transcript |
-| `static/index.html` | Browser UI (mic capture, image strip, controls) |
-| `launch.command` | Double-click launcher for macOS |
+| `public/index.html` | The entire app: UI, mic capture, scene extraction, fal.ai calls |
+| `firebase.json` | Firebase Hosting config |
 
-## Model choice
+## History
 
-The current setup uses **SD 1.5 + Hyper-SD 1-step LoRA at 512x512**. This was chosen for speed on an M1 Pro: generation lands around 2-4 seconds per scene, which is short enough to keep up with natural narration pace. Previous iterations used SDXL Lightning (4-step, slower) — see the git history if you want to switch back for higher fidelity at the cost of latency.
-
-## Troubleshooting
-
-**"ComfyUI not running"**
-Make sure ComfyUI is listening on `127.0.0.1:8188` (the default). Check with `curl http://127.0.0.1:8188/system_stats`.
-
-**Browser mic not working**
-Web Speech API only runs in Chrome and Edge. Safari and Firefox will not work. Also check that the site has microphone permission.
-
-**First image is slow**
-The first generation loads the model into VRAM (~10-15s). Subsequent images are ~2-4s. Click **Unload** when you're done to free memory.
-
-**Weird or unrelated illustrations**
-The scene extractor is keyword-based, not LLM-driven — it works best with vivid, concrete language. Abstract narration ("then he thought about life") will produce vague images.
-
-## License
-
-Personal project, no license declared. Ask before reusing.
+The original version ran fully locally: Python server + ComfyUI + SD 1.5 + Hyper-SD LoRA on an M1 Pro. That version is preserved in git history before commit `<rewrite>`. This rewrite traded local-only for shareable-online — same UX, hosted image generation.
