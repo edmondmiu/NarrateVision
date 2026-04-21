@@ -1,5 +1,5 @@
 """
-ComfyUI API client for SDXL Lightning image generation.
+ComfyUI API client for SD 1.5 + Hyper-SD 1-step image generation.
 Connects via WebSocket for progress updates and step previews.
 """
 
@@ -12,18 +12,18 @@ import uuid
 COMFYUI_URL = "http://127.0.0.1:8188"
 CLIENT_ID = str(uuid.uuid4())
 
-# SDXL Lightning 4-step workflow
+# SD 1.5 + Hyper-SD 1-step LoRA workflow
 WORKFLOW_TEMPLATE = {
     "3": {
         "class_type": "KSampler",
         "inputs": {
             "seed": 0,
-            "steps": 4,
+            "steps": 1,
             "cfg": 1.0,
             "sampler_name": "euler",
-            "scheduler": "sgm_uniform",
+            "scheduler": "normal",
             "denoise": 1.0,
-            "model": ["4", 0],
+            "model": ["10", 0],
             "positive": ["6", 0],
             "negative": ["7", 0],
             "latent_image": ["5", 0],
@@ -32,14 +32,14 @@ WORKFLOW_TEMPLATE = {
     "4": {
         "class_type": "CheckpointLoaderSimple",
         "inputs": {
-            "ckpt_name": "sdxl_lightning_4step.safetensors",
+            "ckpt_name": "v1-5-pruned-emaonly-fp16.safetensors",
         },
     },
     "5": {
         "class_type": "EmptyLatentImage",
         "inputs": {
-            "width": 1024,
-            "height": 768,
+            "width": 512,
+            "height": 512,
             "batch_size": 1,
         },
     },
@@ -47,14 +47,14 @@ WORKFLOW_TEMPLATE = {
         "class_type": "CLIPTextEncode",
         "inputs": {
             "text": "",
-            "clip": ["4", 1],
+            "clip": ["10", 1],
         },
     },
     "7": {
         "class_type": "CLIPTextEncode",
         "inputs": {
             "text": "blurry, ugly, deformed, text, watermark, low quality",
-            "clip": ["4", 1],
+            "clip": ["10", 1],
         },
     },
     "8": {
@@ -69,6 +69,16 @@ WORKFLOW_TEMPLATE = {
         "inputs": {
             "filename_prefix": "narrate",
             "images": ["8", 0],
+        },
+    },
+    "10": {
+        "class_type": "LoraLoader",
+        "inputs": {
+            "lora_name": "Hyper-SD15-1step-lora.safetensors",
+            "strength_model": 1.0,
+            "strength_clip": 1.0,
+            "model": ["4", 0],
+            "clip": ["4", 1],
         },
     },
 }

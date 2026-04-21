@@ -110,7 +110,7 @@ class IllustrationDisplay:
         self.window = QWidget()
         self.window.setWindowTitle("NarrateVision")
         self.window.setStyleSheet("background-color: #1a1a2e;")
-        self.window.resize(1024, 768)
+        self.window.resize(768, 768)
 
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
