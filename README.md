@@ -2,9 +2,11 @@
 
 Speak or read aloud and watch scenes illustrated in real-time. Runs entirely in the browser — no server, no install. Bring your own fal.ai API key.
 
+**Live:** https://edmondmiu.github.io/NarrateVision/
+
 ## Try it
 
-1. Open the site.
+1. Open the [live site](https://edmondmiu.github.io/NarrateVision/).
 2. Sign up at [fal.ai](https://fal.ai) and grab your key from the [dashboard](https://fal.ai/dashboard/keys).
 3. Paste it into **Settings**. The key is stored in your browser's localStorage and only ever sent to fal.ai.
 4. Click **Start Listening** and read aloud. Illustrations appear every couple of seconds as the scene changes.
@@ -40,27 +42,19 @@ That's it. No Python, no GPU, no ComfyUI.
 ```bash
 git clone https://github.com/edmondmiu/NarrateVision.git
 cd NarrateVision
-# Open public/index.html with any static server, e.g.
-npx serve public
+npx serve docs
 ```
 
 ## Deploy
 
-Deployed via Firebase Hosting on the `edmondmiu@gmail.com` account. To deploy your own copy:
-
-```bash
-npm install -g firebase-tools
-firebase login
-firebase init hosting   # pick an existing project or create one, use `public` as the directory
-firebase deploy
-```
+Hosted on GitHub Pages from the `docs/` folder on `main`. Any push to `main` redeploys automatically.
 
 ## Project layout
 
 | File | Purpose |
 |---|---|
-| `public/index.html` | The entire app: UI, mic capture, scene extraction, fal.ai calls |
-| `firebase.json` | Firebase Hosting config |
+| `docs/index.html` | The entire app: UI, mic capture, scene extraction, fal.ai calls |
+| `firebase.json` | Optional Firebase Hosting config (not used, kept for fallback) |
 
 ## History
 
